@@ -9,9 +9,9 @@ Aplicação responsiva de serviços e agendamentos, com áreas distintas para cl
 - Perfil criado automaticamente no cadastro com papel de cliente. O painel `/admin` só abre para uma conta explicitamente promovida a proprietária.
 - Catálogo público de serviços ativos com descrição, preço e duração.
 - Agendamento autenticado: seleção de serviço, data e horário consultado no banco; a reserva é criada no servidor com o preço e o sinal recalculados e proteção contra concorrência.
-- Área `/minha-conta` com histórico, dados de Pix, solicitação de cancelamento e links para pedir remarcação ou falar com a profissional.
+- Área `/minha-conta` com histórico, dados de Pix, envio privado do comprovante do sinal (JPG, PNG, WebP ou PDF até 5 MB), solicitação de cancelamento e links para pedir remarcação ou falar com a profissional.
 - Painel `/admin` para consultar agenda e clientes, cadastrar/editar/publicar serviços, alterar horários semanais, remarcar/cancelar atendimentos, atualizar status e gerenciar dados de Pix e contato.
-- Financeiro para confirmar manualmente o recebimento de Pix e registrar reembolsos feitos fora do aplicativo, com trilha de auditoria.
+- Financeiro para revisar comprovantes por links privados temporários, confirmar manualmente o recebimento de Pix e registrar reembolsos feitos fora do aplicativo, com trilha de auditoria.
 - WhatsApp manual: abre uma conversa com texto pré-preenchido para lembretes, dúvidas ou pedidos de remarcação; a pessoa precisa revisar e enviar a mensagem.
 - Sinal padrão de 50% e reserva pendente por 30 minutos, configuráveis pela proprietária. O horário só é confirmado após confirmação manual do Pix.
 - Layout adaptável para telas menores e maiores.
@@ -19,7 +19,8 @@ Aplicação responsiva de serviços e agendamentos, com áreas distintas para cl
 
 ## Limites importantes
 
-- O aplicativo não gera cobrança Pix, QR Code, comprovante ou confirmação bancária automática. A cliente transfere para a chave configurada; a profissional confirma o recebimento.
+- O aplicativo não gera cobrança Pix, QR Code nem confirmação bancária automática. A cliente transfere para a chave configurada e envia o comprovante; a profissional confere o arquivo e confirma o recebimento.
+- O comprovante só pode ser enviado enquanto a reserva estiver ativa e aguardando o sinal. Reservas canceladas ou expiradas não podem ter pagamento confirmado pelo painel; é necessário verificar a disponibilidade antes de combinar outro horário.
 - Registrar um reembolso não transfere dinheiro. A devolução deve ser feita fora do aplicativo antes de registrar o valor.
 - WhatsApp não é enviado automaticamente nem há agendamento de lembretes. Os links abrem o WhatsApp para envio manual.
 - Decisões fora do prazo de cancelamento são feitas pela profissional. Estorno, crédito ou retenção são registrados manualmente; nenhuma retenção é automatizada.
@@ -35,7 +36,7 @@ A migration `supabase/migrations/202610310001_initial_schema.sql` define a base 
 - Agendamentos com status, valores registrados no momento da reserva e proteção contra sobreposição de horários ativos.
 - Pagamentos, notificações e registros de auditoria.
 
-As migrations habilitam RLS e incluem RPCs com validação de disponibilidade e autorização. A segunda migration adiciona criação automática do perfil, regras de proprietária, configuração do negócio, reserva, cancelamento, remarcação e operações manuais de pagamento. O padrão de cancelamento sem custo é 24 horas; decisões fora do prazo são feitas pela profissional.
+As três migrations habilitam RLS e incluem RPCs com validação de disponibilidade e autorização. A segunda adiciona criação automática do perfil, regras de proprietária, configuração do negócio, reserva, cancelamento, remarcação e operações manuais de pagamento. A terceira configura o bucket privado de comprovantes e a RPC de envio. O padrão de cancelamento sem custo é 24 horas; decisões fora do prazo são feitas pela profissional.
 
 ## Tecnologias
 
@@ -59,15 +60,15 @@ Se usar Supabase, configure no `.env` a URL do projeto e a chave pública (`anon
 
 O `.env` é local e ignorado pelo Git. Use somente uma chave pública `anon`/publishable no frontend; nunca coloque `service_role`, token de provedor ou senha de banco em variáveis `VITE_*`.
 
-## URLs de confirmação de e-mail
+## Autenticação e redirecionamentos
 
-O cadastro envia o link de confirmação de volta para `/entrar` na mesma origem em que o formulário foi aberto. No painel Supabase, em **Authentication → URL Configuration**:
+No projeto Supabase vinculado, a confirmação de e-mail está desativada temporariamente; novos cadastros recebem uma sessão imediatamente. Se reativar a confirmação, o cadastro retorna para `/entrar` na origem atual. Configure então em **Authentication → URL Configuration**:
 
 - Defina **Site URL** para a URL principal publicada (por exemplo, `https://seu-dominio.com.br`), nunca `localhost:3000` em produção.
 - Em **Redirect URLs**, permita `http://localhost:5173/entrar` para desenvolvimento e `https://seu-dominio.com.br/entrar` para produção, substituindo pelo domínio real.
 - Se também testar por um endereço temporário, adicione a URL completa desse endereço seguida de `/entrar` enquanto ele for válido.
 
-Após alterar essas opções, solicite um novo e-mail de confirmação. Links antigos continuam usando o destino que foi gerado quando a mensagem foi enviada.
+Links de confirmação antigos continuam usando o destino que foi gerado quando a mensagem foi enviada.
 
 Comandos disponíveis:
 
@@ -103,8 +104,8 @@ Entre novamente para carregar o papel atualizado. A proprietária poderá então
 
 ## Antes de produção
 
-- Aplicar as duas migrations no projeto apontado por `.env`; a consulta atual indica que `public.services` ainda não existe nesse banco.
-- Configurar URLs de redirecionamento e confirmação de e-mail no Supabase Auth.
+- Aplicar as três migrations no ambiente Supabase de produção.
+- Reativar confirmação de e-mail se o negócio passar a exigir verificação do endereço.
 - Rever RLS, privacidade/LGPD, backups, logs e retenção.
 - Se necessário, integrar um provedor Pix com webhook validado no servidor e uma API autorizada do WhatsApp.
 

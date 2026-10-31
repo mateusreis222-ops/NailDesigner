@@ -124,6 +124,17 @@ h1 em, h2 em { color: #967b6c; font-weight: 400; }
 .booking-result h2 { font-size: 28px; }
 .deposit-due { font-size: 15px; }
 .booking-result-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 20px; }
+.proof-submit { display: grid; justify-items: start; gap: 10px; margin: 18px 0; padding-top: 16px; border-top: 1px solid #e2d8d0; }
+.proof-submit .muted, .proof-submit .form-success, .proof-submit .form-error { margin: 0; }
+.proof-upload { position: relative; overflow: hidden; min-height: 44px; cursor: pointer; }
+.proof-upload input[type="file"] { position: absolute; inset: 0; width: 100%; height: 100%; min-height: 0; padding: 0; opacity: 0; cursor: pointer; }
+.proof-upload.is-uploading { opacity: .65; }
+.proof-hint { color: #887c75; font-size: 11px; }
+.admin-proof-list { display: grid; gap: 10px; }
+.admin-proof-row { display: flex; justify-content: space-between; align-items: center; gap: 18px; padding: 16px; background: white; border: 1px solid #eee7e1; }
+.admin-proof-row > div { display: grid; gap: 6px; min-width: 0; }
+.admin-proof-row small { color: #887c75; font-size: 11px; }
+.admin-proof-row .button { flex: 0 0 auto; }
 .service-list { margin-top: 32px; border-top: 1px solid #e2d8d0; }
 .service-row { display: flex; justify-content: space-between; align-items: center; gap: 24px; padding: 24px 0; border-bottom: 1px solid #e2d8d0; }
 .service-row h2 { margin: 0 0 8px; font-size: 24px; }
@@ -228,6 +239,8 @@ h1 em, h2 em { color: #967b6c; font-weight: 400; }
   .admin-table td:last-child::before { display: block; margin-bottom: 8px; }
   .admin-row-actions { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); }
   .admin-row-actions input, .admin-row-actions select, .admin-row-actions button, .admin-row-actions a { width: 100%; max-width: none; min-height: 44px; }
+  .admin-proof-row { align-items: stretch; flex-direction: column; }
+  .admin-proof-row .button { width: 100%; min-height: 44px; }
 }
 
 @media (max-width: 420px) {

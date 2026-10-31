@@ -7,7 +7,7 @@ import { supabase } from "../../lib/supabase";
 
 type Tab = "agenda" | "clientes" | "servicos" | "financeiro" | "horarios";
 type Service = { id: string; name: string; description: string | null; price: number; duration_minutes: number; active: boolean };
-type Payment = { id: string; amount: number; status: string; refunded_amount: number };
+type Payment = { id: string; amount: number; status: string; refunded_amount: number; receipt_path: string | null; proof_submitted_at: string | null };
 type Customer = { full_name: string; phone: string | null };
 type Appointment = {
   id: string;
@@ -15,6 +15,7 @@ type Appointment = {
   starts_at: string;
   ends_at: string;
   status: string;
+  reservation_expires_at: string | null;
   service_name_snapshot: string;
   service_price_snapshot: number;
   deposit_amount: number;
@@ -72,6 +73,7 @@ export function AdminPage() {
   const [servicePrice, setServicePrice] = useState("");
   const [serviceDuration, setServiceDuration] = useState("60");
   const [refundAmounts, setRefundAmounts] = useState<Record<string, string>>({});
+  const [proofUrls, setProofUrls] = useState<Record<string, string>>({});
   const [cancelResolutions, setCancelResolutions] = useState<Record<string, "refund" | "credit" | "retain">>({});
   const [cancelNotes, setCancelNotes] = useState<Record<string, string>>({});
   const [rescheduleValues, setRescheduleValues] = useState<Record<string, string>>({});
@@ -86,7 +88,7 @@ export function AdminPage() {
     setLoading(true);
     void Promise.all([
       supabase.from("appointments")
-        .select("id, customer_id, starts_at, ends_at, status, service_name_snapshot, service_price_snapshot, deposit_amount, remaining_amount, profiles!appointments_customer_id_fkey(full_name, phone), payments(id, amount, status, refunded_amount)")
+        .select("id, customer_id, starts_at, ends_at, status, reservation_expires_at, service_name_snapshot, service_price_snapshot, deposit_amount, remaining_amount, profiles!appointments_customer_id_fkey(full_name, phone), payments(id, amount, status, refunded_amount, receipt_path, proof_submitted_at)")
         .eq("business_id", businessId).order("starts_at", { ascending: false }).limit(300),
       supabase.from("services")
         .select("id, name, description, price, duration_minutes, active")
@@ -174,12 +176,36 @@ export function AdminPage() {
 
   async function callOwnerRpc(name: string, args: Record<string, unknown>, success: string) {
     if (!supabase) return;
+    if (name === "owner_confirm_payment") {
+      const paymentId = String(args.p_payment_id);
+      const appointment = appointments.find((item) => item.payments.some((payment) => payment.id === paymentId));
+      if (appointment?.status !== "pending_payment") {
+        setError("Este agendamento foi cancelado ou expirou e não pode ser confirmado.");
+        return;
+      }
+      if (!appointment.reservation_expires_at || new Date(appointment.reservation_expires_at) <= new Date()) {
+        setError("O prazo da reserva expirou. Confirme a disponibilidade antes de aceitar o pagamento.");
+        return;
+      }
+    }
     setSaving(true);
     setError("");
     const { error: requestError } = await supabase.rpc(name, args);
     setSaving(false);
     if (requestError) setError(requestError.message);
     else showResult(success);
+  }
+
+  async function createProofLink(paymentId: string, storagePath: string) {
+    if (!supabase) return;
+    const { data, error: requestError } = await supabase.storage
+      .from("payment-proofs")
+      .createSignedUrl(storagePath, 300);
+    if (requestError) {
+      setError(requestError.message);
+      return;
+    }
+    setProofUrls((urls) => ({ ...urls, [paymentId]: data.signedUrl }));
   }
 
   async function saveHours(weekday: number) {
@@ -262,6 +288,19 @@ export function AdminPage() {
           </section>}
 
           {tab === "financeiro" && <section className="admin-panel-section"><h2>Sinais e pagamentos</h2>{paymentRows.length ? <div className="admin-table-wrap"><table className="admin-table"><thead><tr><th>Cliente / serviço</th><th>Valor</th><th>Status</th><th>Reembolso</th><th>Ações</th></tr></thead><tbody>{paymentRows.map(({ appointment, ...payment }) => <tr key={payment.id}><td data-label="Cliente / serviço">{appointment.profiles?.full_name ?? "Cliente"}<small>{appointment.service_name_snapshot} · {dateTime(appointment.starts_at)}</small></td><td data-label="Valor">{money(Number(payment.amount))}</td><td data-label="Status">{payment.status === "pending" ? "Pendente" : payment.status === "paid" ? "Recebido" : payment.status === "partially_refunded" ? "Parcialmente estornado" : payment.status === "refunded" ? "Estornado" : payment.status}</td><td data-label="Reembolso">{money(Number(payment.refunded_amount))}</td><td data-label="Ações"><div className="admin-row-actions">{payment.status === "pending" && <button type="button" onClick={() => void callOwnerRpc("owner_confirm_payment", { p_payment_id: payment.id }, "Pagamento confirmado e agendamento atualizado.")}>Confirmar Pix recebido</button>}{["paid", "partially_refunded"].includes(payment.status) && <><input aria-label="Valor do estorno efetuado" type="number" min="0.01" max={Number(payment.amount) - Number(payment.refunded_amount)} step="0.01" placeholder="Valor estornado" value={refundAmounts[payment.id] ?? ""} onChange={(event) => setRefundAmounts((values) => ({ ...values, [payment.id]: event.target.value }))} /><button type="button" disabled={!refundAmounts[payment.id]} onClick={() => { const amount = Number(refundAmounts[payment.id]); if (window.confirm(`Confirma que já devolveu ${money(amount)} fora do sistema?`)) void callOwnerRpc("owner_register_refund", { p_payment_id: payment.id, p_amount: amount }, "Estorno registrado. A transferência deve ser feita manualmente no banco."); }}>Registrar estorno manual</button></>}</div></td></tr>)}</tbody></table></div> : <p className="muted">Nenhum pagamento registrado até agora.</p>}<p className="form-notice">Confirmar ou registrar aqui não movimenta dinheiro. O Pix e qualquer devolução são feitos fora do aplicativo.</p></section>}
+
+          {tab === "financeiro" && <section className="admin-panel-section proof-review-section">
+            <h2>Comprovantes enviados</h2>
+            {paymentRows.some(({ receipt_path }) => receipt_path) ? <div className="admin-proof-list">
+              {paymentRows.filter(({ receipt_path }) => receipt_path).map(({ appointment, ...payment }) => <article className="admin-proof-row" key={payment.id}>
+                <div>
+                  <strong>{appointment.profiles?.full_name ?? "Cliente"} · {appointment.service_name_snapshot}</strong>
+                  <small>{money(Number(payment.amount))}{payment.proof_submitted_at ? ` · Enviado ${dateTime(payment.proof_submitted_at)}` : ""}</small>
+                </div>
+                {proofUrls[payment.id] ? <a className="button button-outline" href={proofUrls[payment.id]} target="_blank" rel="noreferrer">Abrir comprovante</a> : <button className="button button-outline" type="button" onClick={() => void createProofLink(payment.id, payment.receipt_path!)}>Ver comprovante</button>}
+              </article>)}
+            </div> : <p className="muted">Os comprovantes enviados pelas clientes aparecerão aqui.</p>}
+          </section>}
 
           {tab === "horarios" && <section className="admin-panel-section">
             <h2>Disponibilidade semanal</h2>
