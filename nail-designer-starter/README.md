@@ -59,6 +59,16 @@ Se usar Supabase, configure no `.env` a URL do projeto e a chave pública (`anon
 
 O `.env` é local e ignorado pelo Git. Use somente uma chave pública `anon`/publishable no frontend; nunca coloque `service_role`, token de provedor ou senha de banco em variáveis `VITE_*`.
 
+## URLs de confirmação de e-mail
+
+O cadastro envia o link de confirmação de volta para `/entrar` na mesma origem em que o formulário foi aberto. No painel Supabase, em **Authentication → URL Configuration**:
+
+- Defina **Site URL** para a URL principal publicada (por exemplo, `https://seu-dominio.com.br`), nunca `localhost:3000` em produção.
+- Em **Redirect URLs**, permita `http://localhost:5173/entrar` para desenvolvimento e `https://seu-dominio.com.br/entrar` para produção, substituindo pelo domínio real.
+- Se também testar por um endereço temporário, adicione a URL completa desse endereço seguida de `/entrar` enquanto ele for válido.
+
+Após alterar essas opções, solicite um novo e-mail de confirmação. Links antigos continuam usando o destino que foi gerado quando a mensagem foi enviada.
+
 Comandos disponíveis:
 
 ```bash

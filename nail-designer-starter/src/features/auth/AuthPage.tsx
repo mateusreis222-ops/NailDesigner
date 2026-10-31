@@ -39,7 +39,10 @@ export function AuthPage() {
         const { data, error: signUpError } = await supabase.auth.signUp({
           email,
           password,
-          options: { data: { full_name: fullName.trim(), phone: phone.trim() || null } },
+          options: {
+            emailRedirectTo: new URL("/entrar", window.location.origin).toString(),
+            data: { full_name: fullName.trim(), phone: phone.trim() || null },
+          },
         });
         if (signUpError) throw signUpError;
         if (!data.session) {
